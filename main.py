@@ -7,7 +7,7 @@ import joblib
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(title="Web Intrusion Detection API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,7 +40,7 @@ xgb = joblib.load("xgb_.joblib")
 gb = joblib.load("pipeline_gb1.joblib")
 
 
-app = FastAPI(title="Web Intrusion Detection API")
+
 
 
    
