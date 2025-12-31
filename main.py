@@ -5,7 +5,9 @@ from typing import List,Literal,Annotated
 import pandas as pd
 import joblib
 from fastapi import Query
+from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI()
 
 
 import __main__
@@ -245,7 +247,6 @@ async def predict_intrusion(data:IntrusionRequest,
         "prediction": prediction,
         "confidence": round(probability, 4)
     }
-
 
 # prediction = int(svc.predict(data)[0])
 # #     probability = float(xgb.predict_proba(data).max())
