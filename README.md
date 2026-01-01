@@ -27,8 +27,10 @@ Detect whether a given network connection is **normal or an intrusion** based on
 ## 🏗️ System Architecture
 
 Client / Swagger UI
+
 ↓
 FastAPI (Raw JSON Input)
+
 ↓
 Sklearn Pipeline
 ├─ DropAndClip (Custom Transformer)
@@ -40,9 +42,13 @@ Prediction + Confidence Score
 ---
 
 ## 📂 Project Structure
+
+```
 ml_models/
+|
 │
 ├── main.py # FastAPI application
+|
 ├── preprocess.py # Custom DropAndClip transformer
 │
 ├── models/
@@ -56,7 +62,7 @@ ml_models/
 ├── requirements.txt
 └── README.md
 
----
+```
 
 
 ---
@@ -173,3 +179,4 @@ Swagger UI provides a dropdown for model selection.
 
 
 `
+
