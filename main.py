@@ -187,15 +187,15 @@ class IntrusionRequest(BaseModel):
                 "service": "http",
                 "flag": "SF",
                 "src_bytes": 181,
-                "dst_bytes": 5450,
+                "dst_bytes": 50,
                 "land": 0,
                 "logged_in": 1,
                 "root_shell": 0,
                 "is_guest_login": 0,
                 "count": 5,
                 "srv_count": 3,
-                "dst_host_count": 50,
-                "dst_host_srv_count": 25,
+                "dst_host_count": 0,
+                "dst_host_srv_count": 0,
                 "serror_rate": 0.0,
                 "srv_serror_rate": 0.0,
                 "rerror_rate": 0.0,
@@ -228,7 +228,7 @@ model_registry = {
 @app.post("/predict")
 async def predict_intrusion(data:IntrusionRequest,
                             model:Literal["lr","knn","dt","rf","svc","cat","xgb","ada","gb"] = 
-                            Query(
+                             Query(
                                default="xgb",
                                description="select ml model for predictions"
                             )):
@@ -242,13 +242,34 @@ async def predict_intrusion(data:IntrusionRequest,
             status_code=400,
             content={"error": "Invalid model choice"}
         )
-    if(selected_model == 'svc'):
+    
+    if(model == "lr"):
+        prediction = int(selected_model.predict(df)[0])
+        probability = float(lr.predict_proba(df).max())
+    elif(model == "knn"):
+        prediction = int(selected_model.predict(df)[0])
+        probability = float(knn.predict_proba(df).max())
+    elif(model == "dt"):
+        prediction = int(selected_model.predict(df)[0])
+        probability = float(dt.predict_proba(df).max())
+    elif(model == "rf"):
+        prediction = int(selected_model.predict(df)[0])
+        probability = float(rf.predict_proba(df).max())
+    elif(model == 'svc'):
         prediction = int(selected_model.predict(df)[0])
         probability = float(xgb.predict_proba(df).max())
+    elif(model == "cat"):
+        prediction = int(selected_model.predict(df)[0])
+        probability = float(cat.predict_proba(df).max())
+    elif(model == "xgb"):
+        prediction = int(selected_model.predict(df)[0])
+        probability = float(xgb.predict_proba(df).max())
+    elif(model == "ada"):
+        prediction = int(selected_model.predict(df)[0])
+        probability = float(ada.predict_proba(df).max())
     else:
         prediction = int(selected_model.predict(df)[0])
-        probability = float(xgb.predict_proba(df).max())
-
+        probability = float(gb.predict_proba(df).max())
 
     return {
         "model_used": model,
