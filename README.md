@@ -1,7 +1,8 @@
-# 🛡️ Web Intrusion Detection System (FastAPI + ML Pipelines)
+# 🛡️ Web Intrusion Detection System (FastAPI + ML and DL Pipelines )
 
-A **production-grade Web Intrusion Detection System** built using **FastAPI** and **Scikit-Learn Pipelines**, designed to detect malicious network traffic with consistent **training–inference pipelines** and industry-standard ML engineering practices.
+A **production-grade Web Intrusion Detection System** built using **FastAPI** and **Scikit-Learn and Keras Pipelines**, designed to detect malicious network traffic with consistent **training–inference pipelines** and industry-standard ML engineering practices.
 
+<!--
 This project avoids common ML deployment issues such as **feature mismatch, preprocessing drift, and data leakage** by strictly following pipeline-based training and inference.
 
 ---
@@ -179,4 +180,4 @@ Swagger UI provides a dropdown for model selection.
 
 
 `
-
+ -->
