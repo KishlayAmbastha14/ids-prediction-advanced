@@ -1,384 +1,369 @@
 from fastapi import FastAPI
-from pydantic import BaseModel,Field,computed_field
-from fastapi.responses import JSONResponse
-from typing import List,Literal,Annotated
+from pydantic import BaseModel
+
 import pandas as pd
+import numpy as np
 import joblib
-from fastapi import Query
-from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Web Intrusion Detection API")
+print("STEP 1")
+from tensorflow.keras.models import load_model
+print("STEP 2")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],          
-    allow_credentials=True,
-    allow_methods=["*"],         
-    allow_headers=["*"],   
+from tensorflow.keras.models import load_model
+
+from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
+
+# =========================================================
+# LOAD PREPROCESSING FILES
+# =========================================================
+
+scaler = joblib.load(
+    "scaler.pkl"
 )
 
+label_encoder = joblib.load(
+    "label_encoder.pkl"
+)
 
-import __main__
-from preprocess import DropAndClip
-__main__.DropAndClip = DropAndClip
+feature_columns = joblib.load(
+    "feature_columns.pkl"
+)
 
+# =========================================================
+# LOAD ENCODER MODEL
+# =========================================================
 
+# encoder = load_model(
+#     "encoder_model.keras"
+# )
 
+print("Loading encoder...")
+encoder = load_model("encoder_model.keras")
+print("Encoder loaded")
 
-dt = joblib.load("decision_tree.joblib")
-rf = joblib.load("pipeline_rf_tree.joblib")
+# =========================================================
+# LOAD HYBRID XGBOOST MODEL
+# =========================================================
 
-knn = joblib.load("pipeline_knn.joblib")
-lr = joblib.load("pipeline_lr.joblib")
+hybrid_xgb_model = XGBClassifier()
 
-ada = joblib.load("pipeline_ada.joblib")
-cat = joblib.load("pipeline_cat.joblib")
+hybrid_xgb_model.load_model(
+    "xgb_model.json"
+)
 
-svc = joblib.load("pipeline_svm.joblib")
-xgb = joblib.load("xgb_.joblib")
+# =========================================================
+# LOAD STANDALONE XGBOOST MODEL
+# =========================================================
 
-gb = joblib.load("pipeline_gb1.joblib")
+# standalone_xgb_model = XGBClassifier()
 
+standalone_xgb_model = joblib.load(
+    "xgb_model_standalone.pkl"
+)
 
+# =========================================================
+# LOAD CATBOOST MODEL
+# =========================================================
 
+# catboost_model = CatBoostClassifier()
 
+catboost_model = joblib.load(
+    "catboost_model_standalone.pkl"
+)
 
-   
-class IntrusionRequest(BaseModel):
-    # =====================
-    # BASIC CONNECTION INFO
-    # =====================
-    duration: int = Field(
-        ...,
-        ge=0,
-        le=60000,
-        description="Length of the connection in seconds",
-        example=120
-    )
+# =========================================================
+# LOAD ADABOOST MODEL
+# =========================================================
 
-    # protocol_type: Literal["tcp", "udp", "icmp"] = Field(
-    #     ...,
-    #     description="Transport layer protocol used"
-    # )
+adaboost_model = joblib.load(
+    "adaboost_model_standalone.pkl"
+)
 
-    protocol_type : int = Field(
-        ..., 
-        ge=0,
-        le=2,
-        description="Protocol type (0=tcp, 1=udp, 2=icmp)",
-        example=0
-    )
+print("ALL MODELS LOADED SUCCESSFULLY!")
 
+# =========================================================
+# FASTAPI APP
+# =========================================================
 
-    service : int = Field(
-        ...,
-        ge=0,
-        le=69,
-        description="Encoded network service between (0–69)",
-        example=34
-    )
+app = FastAPI()
 
-    flag: int = Field(
-        ...,
-        ge=0,
-        le=10,
-        description="Encoded connection status flag (0–10)",
-        example=1
-    )
+# =========================================================
+# INPUT SCHEMA
+# =========================================================
 
-    # src_bytes: int = Field(..., ge=0)
-    # dst_bytes: int = Field(..., ge=0)
-    src_bytes: int = Field(
-        ...,
-        ge=0,
-        description="Bytes sent from source to destination",
-        example=181
-    )
+class NetworkData(BaseModel):
 
-    dst_bytes: int = Field(
-        ...,
-        ge=0,
-        description="Bytes sent from destination to source",
-        example=5450
-    )
+    duration: float
 
-    # =======================
-    # CONTENT FEATURES
-    # =======================
-    land: int = Field(
-        ...,
-        ge=0,
-        le=1,
-        description="1 if connection is from/to the same host/port, else 0"
-    )
+    protocol_type: str
+    service: str
+    flag: str
 
-    logged_in: int = Field(
-        ...,
-        ge=0,
-        le=1,
-        description="1 if successfully logged in, else 0"
-    )
+    src_bytes: float
+    dst_bytes: float
+    land: float
+    wrong_fragment: float
+    urgent: float
+    hot: float
+    num_failed_logins: float
+    logged_in: float
+    num_compromised: float
+    root_shell: float
+    su_attempted: float
+    num_root: float
+    num_file_creations: float
+    num_shells: float
+    num_access_files: float
+    num_outbound_cmds: float
+    is_host_login: float
+    is_guest_login: float
+    count: float
+    srv_count: float
+    serror_rate: float
+    srv_serror_rate: float
+    rerror_rate: float
+    srv_rerror_rate: float
+    same_srv_rate: float
+    diff_srv_rate: float
+    srv_diff_host_rate: float
+    dst_host_count: float
+    dst_host_srv_count: float
+    dst_host_same_srv_rate: float
+    dst_host_diff_srv_rate: float
+    dst_host_same_src_port_rate: float
+    dst_host_srv_diff_host_rate: float
+    dst_host_serror_rate: float
+    dst_host_srv_serror_rate: float
+    dst_host_rerror_rate: float
+    dst_host_srv_rerror_rate: float
 
-    root_shell: int = Field(
-        ...,
-        ge=0,
-        le=1,
-        description="1 if root shell obtained, else 0"
-    )
-
-    is_guest_login: int = Field(
-        ...,
-        ge=0,
-        le=1,
-        description="1 if guest login, else 0"
-    )
-
-    # land: int = Field(..., ge=0, le=1)
-    wrong_fragment: int = Field(..., ge=0)
-    urgent: int = Field(..., ge=0)
-    hot: int = Field(..., ge=0)
-    num_failed_logins: int = Field(..., ge=0)
-
-    # logged_in: int = Field(..., ge=0, le=1)
-    # root_shell: int = Field(..., ge=0, le=1)
-    su_attempted: int = Field(..., ge=0, le=1)
-    num_file_creations: int = Field(..., ge=0)
-    num_outbound_cmds: int = Field(..., ge=0)
-
-    is_host_login: int = Field(..., ge=0, le=1)
-    # is_guest_login: int = Field(..., ge=0, le=1)
-
-    # =======================
-    # TRAFFIC FEATURES
-    # =======================
-    count: int = Field(..., ge=0)
-    srv_count: int = Field(..., ge=0)
-
-    serror_rate: float = Field(..., ge=0.0, le=1.0)
-    srv_serror_rate: float = Field(..., ge=0.0, le=1.0)
-    rerror_rate: float = Field(..., ge=0.0, le=1.0)
-    srv_rerror_rate: float = Field(..., ge=0.0, le=1.0)
-
-    same_srv_rate: float = Field(..., ge=0.0, le=1.0)
-    diff_srv_rate: float = Field(..., ge=0.0, le=1.0)
-    srv_diff_host_rate: float = Field(..., ge=0.0, le=1.0)
-
-    # =======================
-    # HOST BASED FEATURES
-    # =======================
-    dst_host_count: int = Field(..., ge=0)
-    dst_host_srv_count: int = Field(..., ge=0)
-
-    dst_host_same_srv_rate: float = Field(..., ge=0.0, le=1.0)
-    dst_host_diff_srv_rate: float = Field(..., ge=0.0, le=1.0)
-    dst_host_same_src_port_rate: float = Field(..., ge=0.0, le=1.0)
-    dst_host_srv_diff_host_rate: float = Field(..., ge=0.0, le=1.0)
-
-    dst_host_serror_rate: float = Field(..., ge=0.0, le=1.0)
-    dst_host_srv_serror_rate: float = Field(..., ge=0.0, le=1.0)
-    dst_host_rerror_rate: float = Field(..., ge=0.0, le=1.0)
-    dst_host_srv_rerror_rate: float = Field(..., ge=0.0, le=1.0)
-
-    class Config:
-        schema_extra = {
-            "example": {
-                "duration": 120,
-                "protocol_type": "tcp",
-                "service": "http",
-                "flag": "SF",
-                "src_bytes": 181,
-                "dst_bytes": 50,
-                "land": 0,
-                "logged_in": 1,
-                "root_shell": 0,
-                "is_guest_login": 0,
-                "count": 5,
-                "srv_count": 3,
-                "dst_host_count": 0,
-                "dst_host_srv_count": 0,
-                "serror_rate": 0.0,
-                "srv_serror_rate": 0.0,
-                "rerror_rate": 0.0,
-                "srv_rerror_rate": 0.0,
-                "same_srv_rate": 0.8,
-                "diff_srv_rate": 0.2,
-                "srv_diff_host_rate": 0.1
-            }
-        }
-
-  
+# =========================================================
+# HOME ROUTE
+# =========================================================
 
 @app.get("/")
-async def main():
-  return {"hello to fastapi backend"}
-
-
-model_registry = {
-   "lr" : lr,
-   "knn" : knn,
-   "dt" : dt,
-   "rf" : rf,
-   "svc" : svc,
-   "cat" : cat,
-   "xgb" : xgb,
-   "ada" : ada,
-   "gb" : gb
-}
-
-@app.post("/predict")
-async def predict_intrusion(data:IntrusionRequest,
-                            model:Literal["lr","knn","dt","rf","svc","cat","xgb","ada","gb"] = 
-                             Query(
-                               default="xgb",
-                               description="select ml model for predictions"
-                            )):
-    
-    df = pd.DataFrame([data.model_dump()])
-    selected_model = model_registry.get(model.lower())
-
-
-    if selected_model is None:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Invalid model choice"}
-        )
-    
-    if(model == "lr"):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(lr.predict_proba(df).max())
-    elif(model == "knn"):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(knn.predict_proba(df).max())
-    elif(model == "dt"):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(dt.predict_proba(df).max())
-    elif(model == "rf"):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(rf.predict_proba(df).max())
-    elif(model == 'svc'):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(xgb.predict_proba(df).max())
-    elif(model == "cat"):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(cat.predict_proba(df).max())
-    elif(model == "xgb"):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(xgb.predict_proba(df).max())
-    elif(model == "ada"):
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(ada.predict_proba(df).max())
-    else:
-        prediction = int(selected_model.predict(df)[0])
-        probability = float(gb.predict_proba(df).max())
+def home():
 
     return {
-        "model_used": model,
-        "prediction": prediction,
-        "confidence": round(probability, 4)
+
+        "message": "IDS Multi-Model API Running"
+
     }
 
-# prediction = int(svc.predict(data)[0])
-# #     probability = float(xgb.predict_proba(data).max())
+# =========================================================
+# TREE MODEL PREPROCESSING
+# =========================================================
 
-# #     return JSONResponse(
-# #         status_code=200,content={
-# #             "prediction":prediction,
-# #             "confidence_matrix":round(float(probability),4)
-# #         }
-# #     )
+def preprocess_tree(data):
 
-# @app.post("/decision_tree_predict")
-# async def decision_tree_model(data:IntrusionRequest):
-#     data = pd.DataFrame([data.model_dump()])
-#     prediction = int(dt.predict(data)[0])
-#     probability = float(dt.predict_proba(data).max())
+    input_df = pd.DataFrame(
+        [data.dict()]
+    )
 
-#     return JSONResponse(
-#         status_code=200,
-#         content={
-#             "prediction":prediction,
-#             "confidence":round(float(probability),4)
-#          }
-#     )
+    # One Hot Encoding
+    input_df = pd.get_dummies(
+        input_df
+    )
 
-# @app.post("/randomforest")
-# async def random_forest(data:IntrusionRequest):
-#     data = pd.DataFrame([data.model_dump()])
-#     prediction = int(rf.predict(data)[0])
-#     probability = float(rf.predict_proba(data).max())
+    # Match Training Columns
+    input_df = input_df.reindex(
+        columns=feature_columns,
+        fill_value=0
+    )
 
-#     return JSONResponse(
-#         status_code=200,content = {
-#             "prediction": prediction,
-#             "confidence_meter":round(float(probability),4)
-#         }
-#     )
+    return input_df
 
+# =========================================================
+# HYBRID MODEL PREPROCESSING
+# =========================================================
 
+def preprocess_hybrid(data):
 
-# @app.post("/lregression")
-# async def lr_regression(data:IntrusionRequest):
-#     data = pd.DataFrame([data.model_dump()])
-#     prediction = int(lr.predict(data)[0])
-#     probability = float(lr.predict_proba(data).max())
+    input_df = preprocess_tree(
+        data
+    )
 
-#     return JSONResponse(
-#         status_code=200,content = {
-#             "prediction": prediction,
-#             "confidence_meter":round(float(probability),4)
-#         }
-#     )
+    scaled_input = scaler.transform(
+        input_df
+    )
 
+    scaled_input = scaled_input.astype(
+        np.float32
+    )
 
-# @app.post("/knnneigbour")
-# async def knn_neighbour(data:IntrusionRequest):
-#     data = pd.DataFrame([data.model_dump()])
-#     prediction = int(knn.predict(data)[0])
-#     probability = float(knn.predict_proba(data).max())
+    return scaled_input
 
-#     return JSONResponse(
-#         status_code=200,content = {
-#             "prediction": prediction,
-#             "confidence_meter":round(float(probability),4)
-#         }
-#     )
+# =========================================================
+# GENERIC PREDICTION FUNCTION
+# =========================================================
 
+def make_prediction(model, features):
 
-# @app.post("/catboost")
-# async def cat_boost(data:IntrusionRequest):
-#     data = pd.DataFrame([data.model_dump()])
-#     prediction = int(cat.predict(data)[0])
-#     probability = float(cat.predict_proba(data).max())
+    prediction = model.predict(
+        features
+    )
 
-#     return JSONResponse(
-#         status_code=200,content = {
-#             "prediction": prediction,
-#             "confidence_meter":round(float(probability),4)
-#         }
-#     )
+    probabilities = model.predict_proba(
+        features
+    )
 
-# @app.post("/xgbboost")
-# async def xgb_boost(data:IntrusionRequest):
-#     data = pd.DataFrame([data.model_dump()])
-#     prediction = int(xgb.predict(data)[0])
-#     probability = float(xgb.predict_proba(data).max())
+    predicted_label = label_encoder.inverse_transform(
+        prediction.astype(int)
+    )
 
-#     return JSONResponse(
-#         status_code=200,content = {
-#             "prediction": prediction,
-#             "confidence_meter":round(float(probability),4)
-#         }
-#     )
+    confidence = float(
+        np.max(probabilities)
+    )
 
-# @app.post("/support_vector_classifier")
-# async def support_vector_classifier(data:IntrusionRequest):
-#     data = pd.DataFrame([data.model_dump()])
-#     prediction = int(svc.predict(data)[0])
-#     probability = float(xgb.predict_proba(data).max())
+    class_probabilities = {
 
-#     return JSONResponse(
-#         status_code=200,content={
-#             "prediction":prediction,
-#             "confidence_matrix":round(float(probability),4)
-#         }
-#     )
+        label_encoder.inverse_transform([i])[0]:
+        round(float(prob), 4)
+
+        for i, prob in enumerate(probabilities[0])
+
+    }
+
+    return {
+
+        "prediction": predicted_label[0],
+
+        "confidence": round(
+            confidence,
+            4
+        ),
+
+        "class_probabilities":
+        class_probabilities
+
+    }
+
+# =========================================================
+# HYBRID AE + XGBOOST
+# =========================================================
+
+@app.post("/predict/hybrid")
+def predict_hybrid(data: NetworkData):
+
+    try:
+
+        scaled_input = preprocess_hybrid(
+            data
+        )
+
+        # Generate Encoded Features
+        encoded_features = encoder.predict(
+            scaled_input,
+            verbose=0
+        )
+
+        encoded_features = encoded_features.astype(
+            np.float32
+        )
+
+        # Feature Fusion
+        fused_features = np.concatenate(
+
+            [
+                scaled_input,
+                encoded_features
+            ],
+
+            axis=1
+        )
+
+        return make_prediction(
+
+            hybrid_xgb_model,
+
+            fused_features
+
+        )
+
+    except Exception as e:
+
+        return {
+
+            "error": str(e)
+
+        }
+
+# =========================================================
+# STANDALONE XGBOOST
+# =========================================================
+
+@app.post("/predict/xgboost")
+def predict_xgboost(data: NetworkData):
+
+    try:
+
+        tree_input = preprocess_tree(
+            data
+        )
+
+        return make_prediction(
+
+            standalone_xgb_model,
+
+            tree_input
+
+        )
+
+    except Exception as e:
+
+        return {
+
+            "error": str(e)
+
+        }
+
+@app.post("/predict/catboost")
+def predict_catboost(data: NetworkData):
+
+    try:
+
+        tree_input = preprocess_tree(
+            data
+        )
+
+        return make_prediction(
+
+            catboost_model,
+
+            tree_input
+
+        )
+
+    except Exception as e:
+
+        return {
+
+            "error": str(e)
+
+        }
+
+@app.post("/predict/adaboost")
+def predict_adaboost(data: NetworkData):
+
+    try:
+
+        tree_input = preprocess_tree(
+            data
+        )
+
+        return make_prediction(
+
+            adaboost_model,
+
+            tree_input
+
+        )
+
+    except Exception as e:
+
+        return {
+
+            "error": str(e)
+
+        }
